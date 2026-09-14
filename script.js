@@ -12,11 +12,7 @@ firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 function onYouTubeIframeAPIReady() {
     player = new YT.Player('player', {
         playerVars: { 
-            'playsinline': 1, 
-            'controls': 0,
-            'listType': 'playlist',
-            'list': PLAYLIST_ID, 
-            'loop': 1
+            'playsinline': 1, 'controls': 0, 'listType': 'playlist', 'list': PLAYLIST_ID, 'loop': 1
         },
         events: {
             'onReady': onPlayerReady,
@@ -49,7 +45,6 @@ function onPlayerStateChange(event) {
         clearInterval(updateTimer);
         updateTimer = setInterval(updateProgressBar, 1000);
         
-        // Only update the queue UI if the modal is currently open to save resources
         if (!document.getElementById('queue-modal').classList.contains('hidden')) {
             renderQueue();
         }
@@ -101,17 +96,16 @@ document.getElementById('seek-bar').addEventListener('input', function() {
 });
 
 // ==========================================
-// PERFORMANCE FIX: Background Fetch Queue
+// Queue Redesign & Search Functionality
 // ==========================================
 let fetchQueue = [];
 let isFetching = false;
 
 function processFetchQueue() {
-    // If nothing to fetch or already fetching, stop
     if (fetchQueue.length === 0 || isFetching) return;
     
     isFetching = true;
-    let id = fetchQueue.shift(); // Take the first ID in line
+    let id = fetchQueue.shift(); 
     
     fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${id}`)
         .then(response => response.json())
@@ -121,18 +115,16 @@ function processFetchQueue() {
                 savedTitles[id] = data.title; 
                 localStorage.setItem('officePlaylistTitles', JSON.stringify(savedTitles)); 
                 
-                // Gently update the text on the screen if the queue is open
                 let li = document.getElementById('track-' + id);
                 if (li) {
-                    let isCurrent = li.classList.contains('active-track');
-                    li.innerText = (isCurrent ? "▶ " : "") + data.title; 
+                    let titleSpan = li.querySelector('.track-title');
+                    if(titleSpan) titleSpan.innerText = data.title;
                 }
             }
         })
         .catch(error => console.log("Skipped fetching track"))
         .finally(() => {
             isFetching = false;
-            // Wait 300 milliseconds before fetching the next song to prevent browser freezing
             setTimeout(processFetchQueue, 300); 
         });
 }
@@ -140,7 +132,10 @@ function processFetchQueue() {
 function toggleQueue() {
     const modal = document.getElementById('queue-modal');
     modal.classList.toggle('hidden');
+    
+    // Clear search bar when opened
     if (!modal.classList.contains('hidden')) {
+        document.getElementById('queue-search').value = "";
         renderQueue();
     }
 }
@@ -164,8 +159,17 @@ function renderQueue() {
         
         if (isCurrent) li.classList.add('active-track');
         
-        let displayText = savedTitles[id] ? savedTitles[id] : "Loading Track " + (index + 1) + "...";
-        li.innerText = (isCurrent ? "▶ " : "") + displayText;
+        let displayText = savedTitles[id] ? savedTitles[id] : "Loading...";
+        let thumbUrl = `https://i.ytimg.com/vi/${id}/mqdefault.jpg`; // Gets official YouTube thumbnail
+        
+        li.innerHTML = `
+            <span class="track-num">${isCurrent ? '▶' : (index + 1)}</span>
+            <img class="track-thumb" src="${thumbUrl}" alt="Thumbnail">
+            <div class="track-info">
+                <span class="track-title">${displayText}</span>
+                <span class="track-sub">YouTube Playlist</span>
+            </div>
+        `;
         
         li.onclick = () => { 
             player.playVideoAt(index);
@@ -181,6 +185,21 @@ function renderQueue() {
     });
 
     processFetchQueue();
+}
+
+// Search Filter Logic
+function filterQueue() {
+    let input = document.getElementById('queue-search').value.toLowerCase();
+    let items = document.querySelectorAll('#queue-list li');
+    
+    items.forEach(item => {
+        let title = item.querySelector('.track-title').innerText.toLowerCase();
+        if (title.includes(input)) {
+            item.style.display = "flex";
+        } else {
+            item.style.display = "none";
+        }
+    });
 }
 
 document.addEventListener('keydown', function(event) {
